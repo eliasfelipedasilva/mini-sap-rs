@@ -1,0 +1,7 @@
+[package]
+name = "mini-sap-rs"
+version = "0.1.0"
+edition = "2021"
+description = "Clean-room modular Mini SAP runtime in Rust with on-demand RAM loading/unloading (<8GB RAM target)"
+
+[dependencies]

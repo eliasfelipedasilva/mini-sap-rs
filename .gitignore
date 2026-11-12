@@ -1,0 +1,32 @@
+# Compiled Rust binaries
+/target/
+/mini-sap-rs
+
+# Proprietary SAP binaries & raw Ghidra outputs (kept locally only)
+/sap_kernel_bins/
+/docs/ghidra_out/
+/tools/ghidra_11.0.3_PUBLIC/
+/tools/diagram-design/
+/tools/*.tgz
+/tools/*.zip
+
+# Licenses & local workspace files (not part of the open-source repo)
+*.lic
+NPL.txt
+CES.txt
+WORKLOG.md
+CLAUDE.md
+.backupignore
+/data/
+/instalar-licenca-abap.sh
+/docs/print-*.png
+/docs/0*.png
+/docs/*.pdf
+/docs/Ajuste-Instalador-MiniSAP.txt
+/docs/roteiro-vlog-linkedin.md
+/docs/arquitetura-vlog.html
+/docs/evidencia-terminal-odata.html
+/docs/POST-LINKEDIN.md
+/docs/linkedin_images/
+/docs/INDICE.md
+/docs/video-BL7y37m5vV4-links.md

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mini-sap-rs — Low-RAM SAP NetWeaver 7.52 Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --color-paper:       #f5f5f5;
+      --color-paper-2:     #ececec;
+      --color-ink:         #2d3142;
+      --color-muted:       #4f5d75;
+      --color-soft:        #5a6580;
+      --color-rule:        rgba(45,49,66,0.12);
+      --color-rule-solid:  rgba(79,93,117,0.25);
+      --color-accent:      #bf4520;
+      --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link:        #2e5aa8;
+      --font-sans:   'Geist', system-ui, sans-serif;
+      --font-serif:  'Instrument Serif', 'Times New Roman', serif;
+      --font-mono:   'Geist Mono', ui-monospace, Menlo, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+      color: var(--color-ink);
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    .header { margin-bottom: 2.25rem; }
+
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.85rem, 3vw + 1rem, 2.6rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      color: var(--color-ink);
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      font-family: var(--font-sans);
+      font-size: 1rem;
+      line-height: 1.55;
+      color: var(--color-muted);
+      max-width: 64ch;
+    }
+
+    .diagram-container {
+      background: transparent;
+      border: none;
+      padding: 0;
+      overflow-x: auto;
+    }
+
+    svg { width: 100%; min-width: 1040px; display: block; }
+
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr 0.95fr;
+      gap: 1rem;
+      margin-top: 1.75rem;
+    }
+
+    @media (max-width: 900px) {
+      .cards { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 6px;
+      border: 1px solid var(--color-rule);
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.875rem;
+      padding-bottom: 0.875rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08);
+    }
+
+    .card-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .card-dot.coral { background: var(--color-accent); }
+    .card-dot.ink   { background: var(--color-ink); }
+    .card-dot.link  { background: var(--color-link); }
+
+    .card h3 {
+      font-family: var(--font-sans);
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--color-ink);
+    }
+
+    .card ul {
+      list-style: none;
+      color: var(--color-muted);
+      font-size: 0.8125rem;
+      line-height: 1.55;
+    }
+
+    .card li {
+      margin-bottom: 0.4rem;
+      padding-left: 0.875rem;
+      position: relative;
+    }
+
+    .card li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: rgba(45,49,66,0.25);
+      font-size: 0.75rem;
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--color-ink);
+    }
+
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(45,49,66,0.10);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <p class="header-eyebrow">Architecture · Ghidra 11.0.3 + Rust 2021 · SAP NetWeaver 7.52 SP04</p>
+      <h1>Running SAP ABAP + Sybase ASE in 2.23 GiB RAM</h1>
+      <p class="subtitle">Decompiling disp+work (87 MB) in Ghidra to map work-process boot allocations in ab_init(), driving an in-container Rust memory governor and low-RAM profile patcher.</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1040 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="sap-lowram-title sap-lowram-desc">
+        <title id="sap-lowram-title">SAP 7.52 Low-RAM Architecture with Ghidra and Rust</title>
+        <desc id="sap-lowram-desc">Architecture diagram showing Ghidra headless decompilation of SAP disp+work feeding the mini-sap-rs Rust runtime and low-RAM profile patcher, running SAP NetWeaver 7.52 SP04 and Sybase ASE 16.0 inside a 2.23 GiB container.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <!-- Background paper -->
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+        <!-- =================================================================
+             1. REGION BOUNDARIES (4px grid)
+             ================================================================= -->
+        <rect x="24" y="40" width="440" height="480" rx="8" fill="transparent" stroke="rgba(45,49,66,0.18)" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="40" y="60" fill="#4f5d75" font-size="8" font-weight="500" font-family="'Geist Mono', monospace" letter-spacing="0.12em">HOST LINUX · GHIDRA + RUST PIPELINE</text>
+
+        <rect x="520" y="40" width="496" height="480" rx="8" fill="transparent" stroke="rgba(45,49,66,0.18)" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="536" y="60" fill="#4f5d75" font-size="8" font-weight="500" font-family="'Geist Mono', monospace" letter-spacing="0.12em">DOCKER · SAP-NPL-LOWRAM (2.23 GIB / 6.00 GIB RAM)</text>
+
+        <!-- =================================================================
+             2. CONNECTORS & MASKS (drawn before boxes; 6-10px label gap)
+             ================================================================= -->
+
+        <!-- Node 1 (ELF) -> Node 2 (Ghidra) vertical -->
+        <line x1="140" y1="160" x2="140" y2="224" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="148" y="184" width="60" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="178" y="193" fill="#5a6580" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">HEADLESS</text>
+
+        <!-- Node 2 (Ghidra) -> Node 3 (mini-sap-rs) horizontal -->
+        <line x1="224" y1="260" x2="264" y2="260" stroke="#bf4520" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+
+        <!-- Node 3 (mini-sap-rs) -> Node 6 (D00 Work Processes) headline flow -->
+        <line x1="440" y1="260" x2="556" y2="260" stroke="#bf4520" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+        <rect x="464" y="240" width="68" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="498" y="249" fill="#bf4520" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">LOWRAM PFL</text>
+
+        <!-- Node 5 (ASCS01) -> Node 6 (D00) vertical -->
+        <line x1="648" y1="160" x2="648" y2="220" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="656" y="184" width="52" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="682" y="193" fill="#5a6580" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">ENQUEUE</text>
+
+        <!-- Node 6 (D00) -> Node 8 (Sybase ASE) horizontal -->
+        <line x1="740" y1="260" x2="816" y2="260" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="756" y="240" width="44" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="778" y="249" fill="#5a6580" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">DBSL</text>
+
+        <!-- Node 4 (SAP GUI Client) -> Node 6 (D00) orthogonal r=8 elbow -->
+        <path d="M 352 400 L 352 360 Q 352 352 360 352 L 592 352 Q 600 352 600 344 L 600 304"
+              fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <rect x="444" y="332" width="64" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="476" y="341" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">DIAG :3200</text>
+
+        <!-- Node 4 (REST Client) -> Node 7 (ICM OData) horizontal -->
+        <line x1="440" y1="440" x2="556" y2="440" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <rect x="464" y="420" width="68" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="498" y="429" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">ODATA :8000</text>
+
+        <!-- Node 7 (ICM OData) -> Node 6 (D00) vertical (fanned 48px from x=600) -->
+        <line x1="648" y1="400" x2="648" y2="304" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- Editorial Callout Leader (dashed Bezier from Node 2 bottom) -->
+        <path d="M 140 300 C 140 324, 120 332, 120 348"
+              fill="none" stroke="rgba(45,49,66,0.35)" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="56" y="368" fill="#2d3142" font-size="13" font-style="italic" font-family="'Instrument Serif', serif">ab_init() allocates 586 MB + 24 rollbuffers</text>
+        <text x="56" y="384" fill="#4f5d75" font-size="12" font-style="italic" font-family="'Instrument Serif', serif">and 5 background monitors before first login</text>
+
+        <!-- =================================================================
+             3. COMPONENT BOXES (all coordinates divisible by 4)
+             ================================================================= -->
+
+        <!-- Node 1: SAP Kernel ELF Binaries -->
+        <rect x="56" y="88" width="168" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="88" width="168" height="72" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+        <rect x="64" y="96" width="28" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="78" y="105" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ELF</text>
+        <text x="140" y="122" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">SAP Kernel Binaries</text>
+        <text x="140" y="138" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">disp+work (87 MB)</text>
+        <text x="140" y="150" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">dbsdbslib.so · 172k syms</text>
+
+        <!-- Node 2: Ghidra Headless Decompiler -->
+        <rect x="56" y="224" width="168" height="76" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="224" width="168" height="76" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="64" y="232" width="28" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="78" y="241" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AST</text>
+        <text x="140" y="258" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Ghidra Decompiler</text>
+        <text x="140" y="274" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">ab_init @ 0x00a4b32b</text>
+        <text x="140" y="288" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">DbSlExpFuns @ 0x001ff470</text>
+
+        <!-- Node 3: mini-sap-rs (FOCAL #1 — Coral) -->
+        <rect x="264" y="220" width="176" height="84" rx="6" fill="#f5f5f5"/>
+        <rect x="264" y="220" width="176" height="84" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1"/>
+        <rect x="272" y="228" width="32" height="12" rx="2" fill="transparent" stroke="rgba(191,69,32,0.50)" stroke-width="0.8"/>
+        <text x="288" y="237" fill="#bf4520" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">RUST</text>
+        <text x="352" y="254" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">mini-sap-rs</text>
+        <text x="352" y="270" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Patcher + Governor</text>
+        <text x="352" y="284" fill="#bf4520" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">PATCH_NPL · --governor</text>
+
+        <!-- Node 4: External Developer Client (SAP GUI + OData) -->
+        <rect x="264" y="400" width="176" height="76" rx="6" fill="#f5f5f5"/>
+        <rect x="264" y="400" width="176" height="76" rx="6" fill="rgba(79,93,117,0.10)" stroke="#5a6580" stroke-width="1"/>
+        <rect x="272" y="408" width="28" height="12" rx="2" fill="transparent" stroke="rgba(90,101,128,0.40)" stroke-width="0.8"/>
+        <text x="286" y="417" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+        <text x="352" y="434" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Developer Clients</text>
+        <text x="352" y="450" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">SAP GUI 7.80 + curl</text>
+        <text x="352" y="464" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Client 001 · DEVELOPER</text>
+
+        <!-- Node 5: ASCS01 Instance -->
+        <rect x="556" y="88" width="184" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="556" y="88" width="184" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="564" y="96" width="36" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="582" y="105" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NR 01</text>
+        <text x="648" y="122" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ASCS01 Central Services</text>
+        <text x="648" y="138" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">msg_server :3601</text>
+        <text x="648" y="150" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">enserver · GREEN</text>
+
+        <!-- Node 6: D00 Application Server Low-RAM (FOCAL #2 — Coral) -->
+        <rect x="556" y="220" width="184" height="84" rx="6" fill="#f5f5f5"/>
+        <rect x="556" y="220" width="184" height="84" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1"/>
+        <rect x="564" y="228" width="36" height="12" rx="2" fill="transparent" stroke="rgba(191,69,32,0.50)" stroke-width="0.8"/>
+        <text x="582" y="237" fill="#bf4520" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NR 00</text>
+        <text x="648" y="254" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">D00 Work Processes</text>
+        <text x="648" y="270" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">2 DIA · 1 UPD · 1 BTC · 1 SPO</text>
+        <text x="648" y="284" fill="#bf4520" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">PHYS_MEMSIZE = 1280 MB</text>
+
+        <!-- Node 7: ICM & SAP Gateway OData -->
+        <rect x="556" y="400" width="184" height="76" rx="6" fill="#f5f5f5"/>
+        <rect x="556" y="400" width="184" height="76" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="564" y="408" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="580" y="417" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HTTP</text>
+        <text x="648" y="434" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ICM &amp; OData Gateway</text>
+        <text x="648" y="450" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">GWSAMPLE_BASIC :8000</text>
+        <text x="648" y="464" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">212 models · 42 hub srvs</text>
+
+        <!-- Node 8: Sybase ASE 16.0 Database -->
+        <rect x="816" y="220" width="176" height="84" rx="6" fill="#f5f5f5"/>
+        <rect x="816" y="220" width="176" height="84" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="824" y="228" width="24" height="12" rx="2" fill="transparent" stroke="rgba(79,93,117,0.50)" stroke-width="0.8"/>
+        <text x="836" y="237" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DB</text>
+        <text x="904" y="254" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Sybase ASE 16.0</text>
+        <text x="904" y="270" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">SID NPL · Port :4901</text>
+        <text x="904" y="284" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">10k SNWD_SO · 27k SBOOK</text>
+
+        <!-- =================================================================
+             4. HORIZONTAL BOTTOM LEGEND STRIP (outside all regions)
+             ================================================================= -->
+        <line x1="24" y1="556" x2="1016" y2="556" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="24" y="580" fill="#4f5d75" font-size="8" font-weight="500" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+
+        <rect x="104" y="572" width="14" height="10" rx="2" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1"/>
+        <text x="124" y="581" fill="#4f5d75" font-size="9" font-family="'Geist', sans-serif">Focal Low-RAM Engine</text>
+
+        <rect x="268" y="572" width="14" height="10" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="288" y="581" fill="#4f5d75" font-size="9" font-family="'Geist', sans-serif">Core Service / AST</text>
+
+        <rect x="420" y="572" width="14" height="10" rx="2" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+        <text x="440" y="581" fill="#4f5d75" font-size="9" font-family="'Geist', sans-serif">Database Store</text>
+
+        <rect x="548" y="572" width="14" height="10" rx="2" fill="rgba(79,93,117,0.10)" stroke="#5a6580" stroke-width="1"/>
+        <text x="568" y="581" fill="#4f5d75" font-size="9" font-family="'Geist', sans-serif">Developer Client</text>
+
+        <line x1="688" y1="577" x2="704" y2="577" stroke="#bf4520" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+        <text x="712" y="581" fill="#4f5d75" font-size="9" font-family="'Geist', sans-serif">Profile &amp; Symbol Flow</text>
+
+        <line x1="856" y1="577" x2="872" y2="577" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <text x="880" y="581" fill="#4f5d75" font-size="9" font-family="'Geist', sans-serif">DIAG / OData Call</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot coral"></span>
+          <h3>1. Kernel Boot Mapping (Ghidra 11.0.3)</h3>
+        </div>
+        <ul>
+          <li>Decompiled <span class="mono">disp+work</span> (87 MB ELF, 172,919 symbols) and <span class="mono">dbsdbslib.so</span> via headless Ghidra scripts.</li>
+          <li>Traced <span class="mono">ab_init @ 0x00a4b32b</span>: each work process eagerly initializes 200 MB Program Buffer, 386 MB Shared Objects, 24 rollbuffers, and 5 trace monitors at startup.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot link"></span>
+          <h3>2. Rust Patcher &amp; Governor (mini-sap-rs)</h3>
+        </div>
+        <ul>
+          <li>Static Rust binary injected into <span class="mono">/usr/local/bin/mini-sap-rs</span> inside the container to audit <span class="mono">RssAnon</span> vs <span class="mono">RssShmem</span>.</li>
+          <li><span class="mono">PATCH_NPL</span> generates <span class="mono">NPL_D00_vhcalnplci.lowram</span>, trimming <span class="mono">PHYS_MEMSIZE=1280</span> and disabling <span class="mono">igswd_mt</span>.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot ink"></span>
+          <h3>3. Verified Runtime Metrics</h3>
+        </div>
+        <ul>
+          <li><span class="mono">sap-npl-lowram</span>: 1.79 GiB boot / 2.23 GiB active</li>
+          <li><span class="mono">Work Processes</span>: 2 DIA · 1 UPD · 1 BTC · 1 SPO</li>
+          <li><span class="mono">Sybase ASE 16.0</span>: 10k SNWD_SO · 27k SBOOK</li>
+          <li><span class="mono">OData Gateway</span>: 212 models · 42 hub services</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>MINI-SAP-RS · GHIDRA 11.0.3 + SAP NETWEAVER 7.52 SP04</span>
+      <span>MIT LICENSE · DIAGRAM-DESIGN EDITORIAL SYSTEM</span>
+    </div>
+
+  </div>
+</body>
+</html>
